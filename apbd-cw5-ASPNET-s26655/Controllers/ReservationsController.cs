@@ -55,7 +55,7 @@ public class ReservationsController : ControllerBase
 
         if (room is null)
         {
-            return NotFound(new
+            return BadRequest(new
             {
                 message = "Room does not exist."
             });
@@ -107,7 +107,7 @@ public class ReservationsController : ControllerBase
 
         if (room is null)
         {
-            return NotFound(new
+            return BadRequest(new
             {
                 message = "Room does not exist."
             });
