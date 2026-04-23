@@ -1,0 +1,164 @@
+using apbd_cw5_ASPNET_s26655.Data;
+using apbd_cw5_ASPNET_s26655.Models;
+using Microsoft.AspNetCore.Mvc;
+
+namespace apbd_cw5_ASPNET_s26655.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class ReservationsController : ControllerBase
+{
+    [HttpGet]
+    public ActionResult<IEnumerable<Reservation>> GetAll(
+        [FromQuery] DateOnly? date,
+        [FromQuery] string? status,
+        [FromQuery] int? roomId)
+    {
+        IEnumerable<Reservation> reservations = InMemoryDataStore.Reservations;
+
+        if (date.HasValue)
+        {
+            reservations = reservations.Where(r => r.Date == date.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            reservations = reservations.Where(r =>
+                string.Equals(r.Status, status, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (roomId.HasValue)
+        {
+            reservations = reservations.Where(r => r.RoomId == roomId.Value);
+        }
+
+        return Ok(reservations);
+    }
+
+    [HttpGet("{id:int}")]
+    public ActionResult<Reservation> GetById(int id)
+    {
+        var reservation = InMemoryDataStore.Reservations.FirstOrDefault(r => r.Id == id);
+
+        if (reservation is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(reservation);
+    }
+
+    [HttpPost]
+    public ActionResult<Reservation> Create([FromBody] Reservation reservation)
+    {
+        var room = InMemoryDataStore.Rooms.FirstOrDefault(r => r.Id == reservation.RoomId);
+
+        if (room is null)
+        {
+            return NotFound(new
+            {
+                message = "Room does not exist."
+            });
+        }
+
+        if (!room.IsActive)
+        {
+            return Conflict(new
+            {
+                message = "Reservation cannot be created for an inactive room."
+            });
+        }
+
+        var hasOverlap = InMemoryDataStore.Reservations.Any(r =>
+            r.RoomId == reservation.RoomId &&
+            r.Date == reservation.Date &&
+            reservation.StartTime < r.EndTime &&
+            reservation.EndTime > r.StartTime);
+
+        if (hasOverlap)
+        {
+            return Conflict(new
+            {
+                message = "Reservation overlaps with an existing reservation for the same room."
+            });
+        }
+
+        var newId = InMemoryDataStore.Reservations.Count == 0
+            ? 1
+            : InMemoryDataStore.Reservations.Max(r => r.Id) + 1;
+
+        reservation.Id = newId;
+        InMemoryDataStore.Reservations.Add(reservation);
+
+        return CreatedAtAction(nameof(GetById), new { id = reservation.Id }, reservation);
+    }
+
+    [HttpPut("{id:int}")]
+    public ActionResult<Reservation> Update(int id, [FromBody] Reservation updatedReservation)
+    {
+        var existingReservation = InMemoryDataStore.Reservations.FirstOrDefault(r => r.Id == id);
+
+        if (existingReservation is null)
+        {
+            return NotFound();
+        }
+
+        var room = InMemoryDataStore.Rooms.FirstOrDefault(r => r.Id == updatedReservation.RoomId);
+
+        if (room is null)
+        {
+            return NotFound(new
+            {
+                message = "Room does not exist."
+            });
+        }
+
+        if (!room.IsActive)
+        {
+            return Conflict(new
+            {
+                message = "Reservation cannot be assigned to an inactive room."
+            });
+        }
+
+        var hasOverlap = InMemoryDataStore.Reservations.Any(r =>
+            r.Id != id &&
+            r.RoomId == updatedReservation.RoomId &&
+            r.Date == updatedReservation.Date &&
+            updatedReservation.StartTime < r.EndTime &&
+            updatedReservation.EndTime > r.StartTime);
+
+        if (hasOverlap)
+        {
+            return Conflict(new
+            {
+                message = "Reservation overlaps with an existing reservation for the same room."
+            });
+        }
+
+        existingReservation.RoomId = updatedReservation.RoomId;
+        existingReservation.OrganizerName = updatedReservation.OrganizerName;
+        existingReservation.Topic = updatedReservation.Topic;
+        existingReservation.Date = updatedReservation.Date;
+        existingReservation.StartTime = updatedReservation.StartTime;
+        existingReservation.EndTime = updatedReservation.EndTime;
+        existingReservation.Status = updatedReservation.Status;
+
+        return Ok(existingReservation);
+    }
+
+    [HttpDelete("{id:int}")]
+    public IActionResult Delete(int id)
+    {
+        var reservation = InMemoryDataStore.Reservations.FirstOrDefault(r => r.Id == id);
+
+        if (reservation is null)
+        {
+            return NotFound();
+        }
+
+        InMemoryDataStore.Reservations.Remove(reservation);
+
+        return NoContent();
+    }
+}
